@@ -1,0 +1,126 @@
+name: Windows Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-windows:
+    if: github.repository == 'MrNeRF/LichtFeld-Studio'
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
+      VCPKG_BUILD_TYPE: release
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg\archives
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Cache CUDA installer
+        id: cache-cuda-installer
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\cuda_12.8.0_571.96_windows.exe
+          key: cuda-installer-${{ runner.os }}-12.8.0-571.96
+
+      - name: Install CUDA 12.8
+        shell: pwsh
+        run: |
+          $cudaInstaller = Join-Path $env:RUNNER_TEMP 'cuda_12.8.0_571.96_windows.exe'
+          if (-not (Test-Path $cudaInstaller)) {
+            Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile $cudaInstaller -Verbose
+          }
+          $process = Start-Process -FilePath $cudaInstaller -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "CUDA installer failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin\nvcc.exe')) {
+            throw "CUDA installation validation failed: nvcc.exe was not found."
+          }
+
+      - name: Set CUDA environment
+        shell: pwsh
+        run: |
+          echo "CUDA_PATH_V12_8=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache vcpkg tool
+        id: cache-vcpkg-tool
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}
+          key: vcpkg-tool-${{ runner.os }}-2026-04-16
+          restore-keys: vcpkg-tool-${{ runner.os }}-
+
+      - name: Setup vcpkg
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cd ..
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Configure vcpkg triplet
+        shell: pwsh
+        run: |
+          $triplet = "$env:VCPKG_ROOT\triplets\x64-windows.cmake"
+          if (-not (Select-String -Path $triplet -Pattern "VCPKG_MAX_CONCURRENCY" -Quiet)) {
+            Add-Content -Path $triplet -Value "set(VCPKG_MAX_CONCURRENCY 2)"
+          }
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-pkgs-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: vcpkg-pkgs-${{ runner.os }}-
+
+      - name: Configure
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PORTABLE=ON -DBUILD_PYTHON_STUBS=OFF -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
+
+      - name: Build
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build build -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "manual-${{ github.run_number }}"
+          }
+          $packageName = "LichtFeld-Studio-windows-$tag.zip"
+          cmake --install build --prefix dist
+          Compress-Archive -Path dist\* -DestinationPath $packageName
+          "package_name=$packageName" >> $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-${{ github.ref_name || github.run_number }}
+          path: ${{ steps.package.outputs.package_name }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.package_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
