@@ -5,13 +5,17 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Branch or tag to build (optional, defaults to selected ref)
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   build-release-windows:
-    if: github.repository == 'MrNeRF/LichtFeld-Studio'
     runs-on: windows-2022
     env:
       VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
@@ -22,6 +26,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.target_ref || github.ref }}
           fetch-depth: 0
           submodules: recursive
 
@@ -101,7 +106,12 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ inputs.target_ref || github.ref }}"
+          if ($tag.StartsWith('refs/tags/')) {
+            $tag = $tag.Substring('refs/tags/'.Length)
+          } elseif ($tag.StartsWith('refs/heads/')) {
+            $tag = $tag.Substring('refs/heads/'.Length)
+          }
           if ([string]::IsNullOrWhiteSpace($tag)) {
             $tag = "manual-${{ github.run_number }}"
           }
