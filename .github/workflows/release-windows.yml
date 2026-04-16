@@ -24,12 +24,21 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Cache CUDA installer
+        id: cache-cuda-installer
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\cuda_12.8.0_571.96_windows.exe
+          key: cuda-installer-${{ runner.os }}-12.8.0-571.96
+
       - name: Install CUDA 12.8
         shell: pwsh
         run: |
-          cd ..
-          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose
-          Start-Process -FilePath .\cuda.exe -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait
+          $cudaInstaller = Join-Path $env:RUNNER_TEMP 'cuda_12.8.0_571.96_windows.exe'
+          if (-not (Test-Path $cudaInstaller)) {
+            Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile $cudaInstaller -Verbose
+          }
+          Start-Process -FilePath $cudaInstaller -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait
 
       - name: Set CUDA environment
         shell: pwsh
@@ -65,7 +74,7 @@ jobs:
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
-          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          path: ${{ env.LOCALAPPDATA }}\vcpkg\archives
           key: vcpkg-pkgs-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
           restore-keys: vcpkg-pkgs-${{ runner.os }}-
 
