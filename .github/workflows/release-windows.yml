@@ -83,6 +83,11 @@ jobs:
             Add-Content -Path $triplet -Value "set(VCPKG_MAX_CONCURRENCY 2)"
           }
 
+      - name: Ensure vcpkg binary cache directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
