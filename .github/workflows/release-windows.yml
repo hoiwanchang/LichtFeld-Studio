@@ -106,10 +106,7 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          $tag = "${{ inputs.target_ref }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "${{ github.ref_name }}"
-          }
+          $tag = "${{ inputs.target_ref || github.ref }}"
           if ($tag.StartsWith('refs/tags/')) {
             $tag = $tag.Substring('refs/tags/'.Length)
           } elseif ($tag.StartsWith('refs/heads/')) {
