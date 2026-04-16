@@ -74,7 +74,7 @@ jobs:
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
-          path: '%LOCALAPPDATA%\vcpkg\archives'
+          path: ${{ runner.temp }}\..\vcpkg\archives
           key: vcpkg-pkgs-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
           restore-keys: vcpkg-pkgs-${{ runner.os }}-
 
