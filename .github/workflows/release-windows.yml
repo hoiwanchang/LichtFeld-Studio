@@ -39,7 +39,13 @@ jobs:
           if (-not (Test-Path $cudaInstaller)) {
             Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile $cudaInstaller -Verbose
           }
-          Start-Process -FilePath $cudaInstaller -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait
+          $process = Start-Process -FilePath $cudaInstaller -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "CUDA installer failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin\nvcc.exe')) {
+            throw "CUDA installation validation failed: nvcc.exe was not found."
+          }
 
       - name: Set CUDA environment
         shell: pwsh
