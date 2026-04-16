@@ -16,7 +16,6 @@ permissions:
 
 jobs:
   build-release-windows:
-    if: github.repository == 'MrNeRF/LichtFeld-Studio' || github.repository == 'hoiwanchang/LichtFeld-Studio'
     runs-on: windows-2022
     env:
       VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
@@ -108,9 +107,6 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ inputs.target_ref }}"
-          if (-not [string]::IsNullOrWhiteSpace($tag)) {
-            $tag = $tag -replace '^refs/(tags|heads)/', ''
-          }
           if ([string]::IsNullOrWhiteSpace($tag)) {
             $tag = "${{ github.ref_name }}"
           }
